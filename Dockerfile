@@ -55,13 +55,17 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
 # Workspace + dedicated venv.
 # Activating the venv via ENV (VIRTUAL_ENV + PATH) is enough — no `source`
 # needed. uv pip will install into $VIRTUAL_ENV automatically.
+#
+# `--seed` installs pip + setuptools + wheel INTO the venv. Required because
+# `comfy install` runs `python -m pip install --upgrade pip uv` early in its
+# bootstrap; without seed packages, the venv has no pip and that step fails.
 # -----------------------------------------------------------------------------
 WORKDIR /workspace
 ENV COMFY_HOME=/workspace/ComfyUI \
     VIRTUAL_ENV=/workspace/venv \
     PATH=/workspace/venv/bin:/usr/local/bin:/usr/bin:/bin
 
-RUN uv venv --python 3.12 "$VIRTUAL_ENV"
+RUN uv venv --seed --python 3.12 "$VIRTUAL_ENV"
 
 # -----------------------------------------------------------------------------
 # 1) Torch stack — pinned to cu130 wheels. MUST come before comfy-cli so that
