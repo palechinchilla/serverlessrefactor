@@ -66,9 +66,14 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
 # bootstrap; without seed packages, the venv has no pip and that step fails.
 # -----------------------------------------------------------------------------
 WORKDIR /workspace
+# PATH must include /sbin and /usr/sbin (system admin tools live there). The
+# NVIDIA base image's entrypoint script calls `ldconfig` to verify the driver,
+# and ldconfig is at /usr/sbin/ldconfig. Dropping those dirs from PATH was what
+# caused the spurious "NVIDIA Driver was not detected" warning at every boot,
+# even after libc-bin was installed.
 ENV COMFY_HOME=/workspace/ComfyUI \
     VIRTUAL_ENV=/workspace/venv \
-    PATH=/workspace/venv/bin:/usr/local/bin:/usr/bin:/bin
+    PATH=/workspace/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 RUN uv venv --seed --python 3.12 "$VIRTUAL_ENV"
 
