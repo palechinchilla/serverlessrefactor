@@ -111,8 +111,11 @@ def launch_comfyui() -> None:
     if _comfy_proc is not None:
         return
 
+    # /workspace/launch_comfy.py is a thin wrapper that pre-configures
+    # comfy-kitchen (enables the Triton backend) and comfy-aimdo (sets log
+    # level to INFO) before exec()ing main.py with our argv.
     args = [
-        sys.executable, "main.py",
+        sys.executable, "/workspace/launch_comfy.py",
         "--listen", COMFY_HOST,
         "--port", str(COMFY_PORT),
         "--disable-auto-launch",

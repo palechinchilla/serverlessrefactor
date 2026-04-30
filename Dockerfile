@@ -35,11 +35,16 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # System packages — kept minimal: Python 3.12 + libs ComfyUI / OpenCV / video pull in.
 #   libgl1, libglib2.0-0  : OpenCV + image preview deps used by some custom nodes
 #   ffmpeg                : video I/O for Wan / LTX SaveVideo nodes
+#   libc-bin              : provides ldconfig, used by the NVIDIA base image's
+#                           entrypoint to verify driver presence. Without it,
+#                           every cold-start log opens with a misleading
+#                           "WARNING: The NVIDIA Driver was not detected" line.
 # -----------------------------------------------------------------------------
 RUN apt-get update && apt-get install -y --no-install-recommends \
         python3.12 python3.12-venv python3-pip \
         git wget curl ca-certificates \
         libgl1 libglib2.0-0 ffmpeg \
+        libc-bin \
     && ln -sf /usr/bin/python3.12 /usr/local/bin/python \
     && ln -sf /usr/bin/python3.12 /usr/local/bin/python3 \
     && rm -rf /var/lib/apt/lists/*
@@ -114,6 +119,16 @@ COPY requirements.txt /tmp/requirements.txt
 RUN uv pip install --no-cache-dir -r /tmp/requirements.txt && rm /tmp/requirements.txt
 
 # -----------------------------------------------------------------------------
+# 4b) Pre-compile bytecode for the venv + ComfyUI tree.
+# Populates __pycache__ so cold-start first-imports skip the compile step
+# (~50–150 ms saved per cold start). `-j 0` parallelises across all build
+# cores. `|| true` because some 3rd-party packages ship intentionally-broken
+# Python files (test fixtures, conditional imports) that compileall flags but
+# nothing at runtime ever imports — failing the build on those would be wrong.
+# -----------------------------------------------------------------------------
+RUN python -m compileall -q -j 0 /workspace/venv /workspace/ComfyUI || true
+
+# -----------------------------------------------------------------------------
 # 5) extra_model_paths.yaml — mount /runpod-volume/models/* on top of baked
 # model dirs. If no network volume is attached, ComfyUI ignores the missing path.
 # -----------------------------------------------------------------------------
@@ -143,8 +158,12 @@ COPY extra_paths.yaml ${COMFY_HOME}/extra_model_paths.yaml
 
 # -----------------------------------------------------------------------------
 # 6) Handler last — small layer, frequent edits, doesn't bust anything heavier.
+# launch_comfy.py is a thin wrapper that pre-configures comfy-kitchen (enables
+# the Triton backend for NVFP4/MXFP8 on Blackwell) and comfy-aimdo (sets log
+# level to INFO) before handing off to ComfyUI's main.py.
 # -----------------------------------------------------------------------------
 COPY handler.py /workspace/handler.py
+COPY launch_comfy.py /workspace/launch_comfy.py
 COPY test_input.json /workspace/test_input.json
 
 # -----------------------------------------------------------------------------
