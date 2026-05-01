@@ -29,7 +29,9 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     UV_LINK_MODE=copy \
-    UV_NO_CACHE=1
+    UV_NO_CACHE=1 \
+    PYTORCH_CUDA_ALLOC_CONF=backend:cudaMallocAsync \
+    COMFY_PRELOAD_COMFY_KITCHEN=0
 
 # -----------------------------------------------------------------------------
 # System packages — kept minimal: Python 3.12 + libs ComfyUI / OpenCV / video pull in.
@@ -163,10 +165,10 @@ COPY extra_paths.yaml ${COMFY_HOME}/extra_model_paths.yaml
 
 # -----------------------------------------------------------------------------
 # 6) Handler last — small layer, frequent edits, doesn't bust anything heavier.
-# launch_comfy.py is a thin wrapper that pre-configures comfy-kitchen (enables
-# the Triton backend for NVFP4/MXFP8 on Blackwell) and comfy-aimdo (sets log
-# level to INFO) before handing off to ComfyUI's main.py.
+# launch_comfy.py is a thin wrapper that sets allocator-related environment
+# before handing off to ComfyUI's main.py.
 # -----------------------------------------------------------------------------
+COPY scripts /workspace/scripts
 COPY handler.py /workspace/handler.py
 COPY launch_comfy.py /workspace/launch_comfy.py
 COPY test_input.json /workspace/test_input.json

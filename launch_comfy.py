@@ -1,14 +1,19 @@
-"""ComfyUI launcher that pre-configures accelerator packages.
+"""ComfyUI launcher with deterministic allocator startup.
 
-Runs `python main.py` indirectly so we can configure package-level state
-(e.g. comfy-kitchen's Triton backend) before ComfyUI imports those packages.
+Runs `python main.py` indirectly so we can set process environment before
+ComfyUI imports torch.
 
-Each pre-config step is wrapped in try/except so a future package rename or
-API change downgrades to a stderr warning, not a boot failure.
+Optional pre-config steps are wrapped in try/except so a future package rename
+or API change downgrades to a stderr warning, not a boot failure.
 """
 
 import os
 import sys
+
+
+# ComfyUI defaults to cudaMallocAsync. Set it before any optional accelerator
+# package can import torch, or PyTorch may observe two different backends.
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "backend:cudaMallocAsync")
 
 
 # Python uses the script's own directory as sys.path[0]. Since this file lives
@@ -19,16 +24,17 @@ import sys
 sys.path.insert(0, os.getcwd())
 
 
-# Enable the Triton backend in comfy-kitchen so Wan/LTX video diffusion gets
-# NVFP4 / MXFP8 quantize-dequantize on Blackwell SM12.0. The package
-# auto-registers backends at import time but ships triton disabled by default;
-# enable_backend("triton") flips that flag before ComfyUI consults the registry.
-try:
-    import comfy_kitchen as _ck
+# Keep accelerator preloads opt-in. Importing comfy_kitchen here may import
+# torch before ComfyUI's startup has finished, which is exactly the ordering
+# ComfyUI warns about. If you need to experiment with this again, set
+# COMFY_PRELOAD_COMFY_KITCHEN=1 and keep PYTORCH_CUDA_ALLOC_CONF explicit.
+if os.environ.get("COMFY_PRELOAD_COMFY_KITCHEN", "").lower() in {"1", "true", "yes", "on"}:
+    try:
+        import comfy_kitchen as _ck
 
-    _ck.enable_backend("triton")
-except Exception as e:
-    print(f"[launch_comfy] comfy_kitchen triton enable skipped: {e!r}", file=sys.stderr)
+        _ck.enable_backend("triton")
+    except Exception as e:
+        print(f"[launch_comfy] comfy_kitchen triton enable skipped: {e!r}", file=sys.stderr)
 
 
 # NOTE: comfy-aimdo log-level configuration intentionally omitted. The 0.3.0

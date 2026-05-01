@@ -45,6 +45,11 @@ SERVER_POLL_INTERVAL_S = 0.2
 COMFY_BASE = f"http://{COMFY_HOST}:{COMFY_PORT}"
 COMFY_WS = f"ws://{COMFY_HOST}:{COMFY_PORT}/ws"
 
+# ComfyUI enables cudaMallocAsync during its early startup. The value must be
+# present before either this parent process or the ComfyUI child imports torch;
+# otherwise PyTorch can load with one allocator backend and later see another.
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "backend:cudaMallocAsync")
+
 logging.basicConfig(
     level=os.environ.get("LOG_LEVEL", "INFO"),
     format="%(asctime)s %(levelname)s %(name)s :: %(message)s",
@@ -89,8 +94,14 @@ def fitness_check() -> None:
 
     dt_ms = (time.perf_counter() - t0) * 1000
     log.info(
-        "fitness OK: device='%s' cap=%s vram=%.1fGB torch=%s cuda=%s (took %.0fms)",
-        props.name, cap, total_gb, torch.__version__, torch.version.cuda, dt_ms,
+        "fitness OK: device='%s' cap=%s vram=%.1fGB torch=%s cuda=%s allocator=%s (took %.0fms)",
+        props.name,
+        cap,
+        total_gb,
+        torch.__version__,
+        torch.version.cuda,
+        os.environ.get("PYTORCH_CUDA_ALLOC_CONF", ""),
+        dt_ms,
     )
 
 
@@ -111,9 +122,8 @@ def launch_comfyui() -> None:
     if _comfy_proc is not None:
         return
 
-    # /workspace/launch_comfy.py is a thin wrapper that pre-configures
-    # comfy-kitchen (enables the Triton backend) and comfy-aimdo (sets log
-    # level to INFO) before exec()ing main.py with our argv.
+    # /workspace/launch_comfy.py is a thin wrapper that sets allocator-related
+    # environment before exec()ing main.py with our argv.
     args = [
         sys.executable, "/workspace/launch_comfy.py",
         "--listen", COMFY_HOST,

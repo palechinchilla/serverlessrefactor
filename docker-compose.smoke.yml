@@ -1,0 +1,18 @@
+services:
+  comfy-worker-smoke:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: comfy-cli-serverless:smoke
+    command: ["python", "-u", "/workspace/scripts/smoke_check.py"]
+    environment:
+      PYTORCH_CUDA_ALLOC_CONF: backend:cudaMallocAsync
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
