@@ -230,6 +230,47 @@ RUN wget -q -O ${COMFY_HOME}/models/vae/wan_2.1_vae.safetensors \
         https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/vae/wan_2.1_vae.safetensors
 
 # -----------------------------------------------------------------------------
+# 5b) Triton runtime build dependencies.
+# Triton's CUDA driver helper (`triton.backends.nvidia.driver.CudaUtils`)
+# JIT-compiles a small C extension on first use to talk to the CUDA driver.
+# The `*-cudnn-runtime-*` base image ships neither a C compiler nor cuda.h,
+# so any workflow that hits torch.compile (e.g. Wan/LTX with
+# WanVideoTorchCompileSettings, or any inductor-backed graph) crashes with
+# "Failed to find C compiler" / "fatal error: cuda.h: No such file".
+#
+# Two separate RUN blocks — `build-essential` is REQUIRED, the CUDA dev
+# headers are best-effort. If the CUDA dev package names ever change in
+# NVIDIA's apt repo, that failure must NOT take the C compiler down with it.
+#
+# Placed late so it doesn't invalidate the cached torch / sage / comfy-cli /
+# custom-node / model-bake layers above.
+# -----------------------------------------------------------------------------
+
+# Step 1: gcc / g++ / make / libc6-dev. MUST succeed; we assert at the end.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+    && rm -rf /var/lib/apt/lists/* \
+    && command -v gcc >/dev/null && command -v g++ >/dev/null \
+    && echo "[build] gcc/g++ confirmed at $(command -v gcc)"
+
+# Step 2: CUDA dev headers (cuda.h, nvrtc.h). Best-effort — if NVIDIA renames
+# the packages between minor versions, we want a clear runtime error
+# ("fatal error: cuda.h: No such file") rather than an opaque apt failure
+# that also took build-essential out. If you see the runtime error, find
+# the right package names with `apt-cache search cuda-cudart-dev` and patch.
+RUN apt-get update && \
+    (apt-get install -y --no-install-recommends \
+        cuda-cudart-dev-13-2 \
+        cuda-nvrtc-dev-13-2 \
+     || echo "[build] WARN: cuda-*-dev-13-2 not installed; verify NVIDIA apt package names") \
+    && rm -rf /var/lib/apt/lists/*
+
+# Triton checks env CC, then clang, then gcc. Pin CC explicitly so the lookup
+# never depends on PATH ordering or update-alternatives state.
+ENV CC=/usr/bin/gcc \
+    CXX=/usr/bin/g++
+
+# -----------------------------------------------------------------------------
 # 6) Handler last — small layer, frequent edits, doesn't bust anything heavier.
 # launch_comfy.py is a thin wrapper that sets allocator-related environment
 # before handing off to ComfyUI's main.py.
