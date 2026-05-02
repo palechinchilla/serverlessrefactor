@@ -35,6 +35,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 # -----------------------------------------------------------------------------
 # System packages — kept minimal: Python 3.12 + libs ComfyUI / OpenCV / video pull in.
+#   python3.12-dev       : Python.h for Triton's runtime C-extension JIT
 #   libgl1, libglib2.0-0  : OpenCV + image preview deps used by some custom nodes
 #   ffmpeg                : video I/O for Wan / LTX SaveVideo nodes
 #   libc-bin              : provides ldconfig, used by the NVIDIA base image's
@@ -43,7 +44,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 #                           "WARNING: The NVIDIA Driver was not detected" line.
 # -----------------------------------------------------------------------------
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        python3.12 python3.12-venv python3-pip \
+        python3.12 python3.12-venv python3-pip python3.12-dev \
         git wget curl ca-certificates \
         libgl1 libglib2.0-0 ffmpeg \
         libc-bin \
@@ -233,10 +234,12 @@ RUN wget -q -O ${COMFY_HOME}/models/vae/wan_2.1_vae.safetensors \
 # 5b) Triton runtime build dependencies.
 # Triton's CUDA driver helper (`triton.backends.nvidia.driver.CudaUtils`)
 # JIT-compiles a small C extension on first use to talk to the CUDA driver.
-# The `*-cudnn-runtime-*` base image ships neither a C compiler nor cuda.h,
-# so any workflow that hits torch.compile (e.g. Wan/LTX with
-# WanVideoTorchCompileSettings, or any inductor-backed graph) crashes with
-# "Failed to find C compiler" / "fatal error: cuda.h: No such file".
+# The `*-cudnn-runtime-*` base image ships neither a C compiler nor CUDA/Python
+# development headers (`cuda.h`, `Python.h`), so any workflow that hits
+# torch.compile (e.g. Wan/LTX with WanVideoTorchCompileSettings, or any
+# inductor-backed graph) crashes with
+# "Failed to find C compiler" / "fatal error: cuda.h: No such file" /
+# "fatal error: Python.h: No such file".
 #
 # Two separate RUN blocks — `build-essential` is REQUIRED, the CUDA dev
 # headers are best-effort. If the CUDA dev package names ever change in
