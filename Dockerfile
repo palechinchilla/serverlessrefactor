@@ -291,6 +291,8 @@ COPY test_input.json /workspace/test_input.json
 #   MIN_VRAM_GB              : fitness gate; pod self-terminates if below
 #   REQUIRED_SM_MAJOR/MINOR  : required compute capability (12.0 = Blackwell)
 #   SERVER_READY_TIMEOUT_S   : how long to wait for ComfyUI to come up
+#   WS_CONNECT_TIMEOUT_S     : websocket connect timeout for ComfyUI events
+#   WS_RECV_TIMEOUT_S        : websocket receive timeout; 0 disables it
 # -----------------------------------------------------------------------------
 ENV COMFY_HOST=127.0.0.1 \
     COMFY_PORT=8188 \
@@ -298,7 +300,9 @@ ENV COMFY_HOST=127.0.0.1 \
     MIN_VRAM_GB=24 \
     REQUIRED_SM_MAJOR=12 \
     REQUIRED_SM_MINOR=0 \
-    SERVER_READY_TIMEOUT_S=120
+    SERVER_READY_TIMEOUT_S=120 \
+    WS_CONNECT_TIMEOUT_S=30 \
+    WS_RECV_TIMEOUT_S=0
 
 # Handler is PID 1 — no shell wrapper, no start.sh, no SSH.
 # `-u` keeps stdout unbuffered for clean RunPod logs.

@@ -41,6 +41,8 @@ REQUIRED_SM_MINOR = int(os.environ.get("REQUIRED_SM_MINOR", "0"))
 
 SERVER_READY_TIMEOUT_S = float(os.environ.get("SERVER_READY_TIMEOUT_S", "120"))
 SERVER_POLL_INTERVAL_S = 0.2
+WS_CONNECT_TIMEOUT_S = float(os.environ.get("WS_CONNECT_TIMEOUT_S", "30"))
+WS_RECV_TIMEOUT_S = float(os.environ.get("WS_RECV_TIMEOUT_S", "0"))
 
 COMFY_BASE = f"http://{COMFY_HOST}:{COMFY_PORT}"
 COMFY_WS = f"ws://{COMFY_HOST}:{COMFY_PORT}/ws"
@@ -257,7 +259,8 @@ def queue_prompt(workflow: dict, client_id: str) -> str:
 
 def wait_for_completion(prompt_id: str, client_id: str) -> None:
     url = f"{COMFY_WS}?{urlencode({'clientId': client_id})}"
-    ws = websocket.create_connection(url, timeout=30)
+    ws = websocket.create_connection(url, timeout=WS_CONNECT_TIMEOUT_S)
+    ws.settimeout(WS_RECV_TIMEOUT_S if WS_RECV_TIMEOUT_S > 0 else None)
     try:
         while True:
             msg = ws.recv()

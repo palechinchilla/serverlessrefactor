@@ -54,11 +54,17 @@ COMFY_EXTRA_ARGS=
 MIN_VRAM_GB=24
 REQUIRED_SM_MAJOR=12
 REQUIRED_SM_MINOR=0
+WS_CONNECT_TIMEOUT_S=30
+WS_RECV_TIMEOUT_S=0
 ```
 
 If you deliberately set `PYTORCH_CUDA_ALLOC_CONF=backend:native`, also add
 `--disable-cuda-malloc` to `COMFY_EXTRA_ARGS` so ComfyUI does not switch the
 allocator after torch has loaded.
+
+`WS_RECV_TIMEOUT_S=0` leaves the ComfyUI websocket receive open during long
+quiet decode, interpolation, or save stages. Keep `WS_CONNECT_TIMEOUT_S` finite
+so an unreachable ComfyUI server still fails promptly.
 
 ## Log Triage
 

@@ -44,6 +44,22 @@ if os.environ.get("COMFY_PRELOAD_COMFY_KITCHEN", "").lower() in {"1", "true", "y
 # we can introspect the installed package directly.
 
 
+# Enable TF32 for FP32 matmul + cuDNN paths. Wan runs predominantly in
+# fp16/bf16 so most of the model is unaffected — TF32 picks up the residual
+# FP32 ops (LayerNorm reductions, time-embedding math, scheduler). PyTorch
+# 2.0+ defaults `set_float32_matmul_precision` to "highest" which disables
+# TF32 on Ampere+; we override to "high". Safe to import torch here: ComfyUI
+# is about to do it anyway and we've already pinned PYTORCH_CUDA_ALLOC_CONF.
+try:
+    import torch as _torch
+
+    _torch.backends.cuda.matmul.allow_tf32 = True
+    _torch.backends.cudnn.allow_tf32 = True
+    _torch.set_float32_matmul_precision("high")
+except Exception as e:
+    print(f"[launch_comfy] TF32 enable skipped: {e!r}", file=sys.stderr)
+
+
 # Hand off to ComfyUI's main as if it had been invoked directly.
 sys.argv[0] = "main.py"
 with open("main.py", "rb") as _f:
