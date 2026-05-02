@@ -1,20 +1,47 @@
-# Optional /runpod-volume overlay for ComfyUI model dirs.
-# Baked /workspace/ComfyUI/models stays the primary search path; anything found
-# under /runpod-volume/models/<kind>/ is added on top, so you can swap LoRAs and
-# extras without rebuilding the image. If no network volume is attached, ComfyUI
-# silently ignores the missing base_path.
-runpod_serverless:
+# /runpod-volume overlay for ComfyUI model dirs.
+#
+# Baked /workspace/ComfyUI/models/* is ALWAYS searched first (ComfyUI's native
+# behaviour); the entries below ADD additional search paths on top.
+#
+# Per-key value semantics:
+#   - `path/`            → joined with base_path → /runpod-volume/path/
+#   - `/abs/path/`       → used verbatim
+#   - `|` literal block  → each line is a separate search path
+#
+# The HF cache snapshot directory is the same for every model kind because
+# the fx-feihou/wan2.2-remix repo bundles checkpoints, LoRAs, VAE, text
+# encoders, etc. into one snapshot — ComfyUI sniffs files by extension/header
+# regardless of what subdir we tell it to look in.
+runpod_worker_comfy:
   base_path: /runpod-volume
-  is_default: false
-  checkpoints: models/checkpoints/
-  clip: models/clip/
+  checkpoints: |
+    models/checkpoints/
+    /runpod-volume/huggingface-cache/hub/models--fx-feihou--wan2.2-remix/snapshots/4369125a0f1157c6b8768df18b7e81bacd5fdc1f/
+  clip: |
+    models/clip/
+    /runpod-volume/huggingface-cache/hub/models--fx-feihou--wan2.2-remix/snapshots/4369125a0f1157c6b8768df18b7e81bacd5fdc1f/
   clip_vision: models/clip_vision/
   configs: models/configs/
   controlnet: models/controlnet/
-  diffusion_models: models/diffusion_models/
+  diffusion_models: |
+    models/diffusion_models/
+    /runpod-volume/huggingface-cache/hub/models--fx-feihou--wan2.2-remix/snapshots/4369125a0f1157c6b8768df18b7e81bacd5fdc1f/
   embeddings: models/embeddings/
-  loras: models/loras/
-  text_encoders: models/text_encoders/
-  unet: models/unet/
-  upscale_models: models/upscale_models/
-  vae: models/vae/
+  loras: |
+    models/loras/
+    /runpod-volume/huggingface-cache/hub/models--fx-feihou--wan2.2-remix/snapshots/4369125a0f1157c6b8768df18b7e81bacd5fdc1f/
+  upscale_models: |
+    models/upscale_models/
+    /runpod-volume/huggingface-cache/hub/models--fx-feihou--wan2.2-remix/snapshots/4369125a0f1157c6b8768df18b7e81bacd5fdc1f/
+  vae: |
+    models/vae/
+    /runpod-volume/huggingface-cache/hub/models--fx-feihou--wan2.2-remix/snapshots/4369125a0f1157c6b8768df18b7e81bacd5fdc1f/
+  unet: |
+    models/unet/
+    /runpod-volume/huggingface-cache/hub/models--fx-feihou--wan2.2-remix/snapshots/4369125a0f1157c6b8768df18b7e81bacd5fdc1f/
+  text_encoders: |
+    models/text_encoders/
+    /runpod-volume/huggingface-cache/hub/models--fx-feihou--wan2.2-remix/snapshots/4369125a0f1157c6b8768df18b7e81bacd5fdc1f/
+  latent_upscale_models: |
+    models/latent_upscale_models/
+    /runpod-volume/huggingface-cache/hub/models--fx-feihou--wan2.2-remix/snapshots/4369125a0f1157c6b8768df18b7e81bacd5fdc1f/

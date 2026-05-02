@@ -142,26 +142,92 @@ RUN python -m compileall -q -j 0 /workspace/venv /workspace/ComfyUI || true
 COPY extra_paths.yaml ${COMFY_HOME}/extra_model_paths.yaml
 
 # =============================================================================
-# USER-EXTENSION LAYER — bake your custom nodes and models BELOW this line.
-# Cache-busting your weights only happens when you edit this section, not when
-# you tweak handler.py.
-#
-# Examples (uncomment + adapt):
-#
-#   RUN cd ${COMFY_HOME}/custom_nodes && \
-#       git clone --depth=1 https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite && \
-#       git clone --depth=1 https://github.com/kijai/ComfyUI-WanVideoWrapper && \
-#       git clone --depth=1 https://github.com/Lightricks/ComfyUI-LTXVideo
-#
-#   # If a custom node has its own requirements.txt:
-#   RUN find ${COMFY_HOME}/custom_nodes -maxdepth 2 -name requirements.txt \
-#         -exec uv pip install --no-cache-dir -r {} \;
-#
-#   # Bake LTX 2.3 / Wan 2.2 weights:
-#   RUN mkdir -p ${COMFY_HOME}/models/diffusion_models && \
-#       wget -O ${COMFY_HOME}/models/diffusion_models/wan22.safetensors \
-#            https://huggingface.co/.../wan22.safetensors
+# USER-EXTENSION LAYER — custom nodes + (eventually) baked models.
+# One RUN per node so editing/adding/removing a single node only invalidates
+# that layer and everything below. `--depth=1` keeps clones small (no git
+# history). `--no-cache-dir` matches the rest of the Dockerfile's uv hygiene.
+# The `if [ -f requirements.txt ]` guard tolerates nodes that ship without one.
 # =============================================================================
+
+# KJNodes — utility nodes incl. SageAttention wrapper used by Wan workflows
+RUN git clone --depth=1 https://github.com/kijai/ComfyUI-KJNodes.git \
+        ${COMFY_HOME}/custom_nodes/ComfyUI-KJNodes && \
+    if [ -f ${COMFY_HOME}/custom_nodes/ComfyUI-KJNodes/requirements.txt ]; then \
+        uv pip install --no-cache-dir -r ${COMFY_HOME}/custom_nodes/ComfyUI-KJNodes/requirements.txt; \
+    fi
+
+# WanVideoWrapper — Wan 2.x video diffusion nodes
+RUN git clone --depth=1 https://github.com/kijai/ComfyUI-WanVideoWrapper.git \
+        ${COMFY_HOME}/custom_nodes/ComfyUI-WanVideoWrapper && \
+    if [ -f ${COMFY_HOME}/custom_nodes/ComfyUI-WanVideoWrapper/requirements.txt ]; then \
+        uv pip install --no-cache-dir -r ${COMFY_HOME}/custom_nodes/ComfyUI-WanVideoWrapper/requirements.txt; \
+    fi
+
+# Custom-Scripts — pythongosssss UX/QoL nodes
+RUN git clone --depth=1 https://github.com/pythongosssss/ComfyUI-Custom-Scripts.git \
+        ${COMFY_HOME}/custom_nodes/ComfyUI-Custom-Scripts && \
+    if [ -f ${COMFY_HOME}/custom_nodes/ComfyUI-Custom-Scripts/requirements.txt ]; then \
+        uv pip install --no-cache-dir -r ${COMFY_HOME}/custom_nodes/ComfyUI-Custom-Scripts/requirements.txt; \
+    fi
+
+# Easy-Use — yolain workflow simplifiers
+RUN git clone --depth=1 https://github.com/yolain/ComfyUI-Easy-Use.git \
+        ${COMFY_HOME}/custom_nodes/ComfyUI-Easy-Use && \
+    if [ -f ${COMFY_HOME}/custom_nodes/ComfyUI-Easy-Use/requirements.txt ]; then \
+        uv pip install --no-cache-dir -r ${COMFY_HOME}/custom_nodes/ComfyUI-Easy-Use/requirements.txt; \
+    fi
+
+# VideoHelperSuite — VHS_VideoCombine + load/save video nodes (LTX/Wan output)
+RUN git clone --depth=1 https://github.com/kosinkadink/ComfyUI-VideoHelperSuite.git \
+        ${COMFY_HOME}/custom_nodes/ComfyUI-VideoHelperSuite && \
+    if [ -f ${COMFY_HOME}/custom_nodes/ComfyUI-VideoHelperSuite/requirements.txt ]; then \
+        uv pip install --no-cache-dir -r ${COMFY_HOME}/custom_nodes/ComfyUI-VideoHelperSuite/requirements.txt; \
+    fi
+
+# Frame-Interpolation + RIFE47 weight bake. The wget runs in the same layer
+# as the clone so a missing-weights image never gets cached.
+RUN git clone --depth=1 https://github.com/Fannovel16/ComfyUI-Frame-Interpolation.git \
+        ${COMFY_HOME}/custom_nodes/ComfyUI-Frame-Interpolation && \
+    if [ -f ${COMFY_HOME}/custom_nodes/ComfyUI-Frame-Interpolation/requirements.txt ]; then \
+        uv pip install --no-cache-dir -r ${COMFY_HOME}/custom_nodes/ComfyUI-Frame-Interpolation/requirements.txt; \
+    fi && \
+    mkdir -p ${COMFY_HOME}/custom_nodes/ComfyUI-Frame-Interpolation/ckpts/rife && \
+    wget -q -O ${COMFY_HOME}/custom_nodes/ComfyUI-Frame-Interpolation/ckpts/rife/rife47.pth \
+        https://huggingface.co/wavespeed/misc/resolve/main/rife/rife47.pth
+
+# =============================================================================
+# Baked model weights — Wan 2.2 I2V stack (text encoder + 4-step Lightning
+# LoRAs + Wan 2.1 VAE). The Wan 2.2 diffusion checkpoint itself is NOT baked
+# here; load it from /runpod-volume/models/diffusion_models/ via extra_paths.yaml,
+# or add another RUN below if you want it in-image.
+# One RUN per file (or LoRA pair) so changing one URL only re-downloads that.
+# =============================================================================
+
+# Model directories — created once so each download RUN can write directly.
+RUN mkdir -p ${COMFY_HOME}/models/checkpoints \
+             ${COMFY_HOME}/models/vae \
+             ${COMFY_HOME}/models/unet \
+             ${COMFY_HOME}/models/clip \
+             ${COMFY_HOME}/models/text_encoders \
+             ${COMFY_HOME}/models/diffusion_models \
+             ${COMFY_HOME}/models/model_patches \
+             ${COMFY_HOME}/models/loras
+
+# UMT5-XXL text encoder for Wan (FP8-scaled). Largest of the four (~6 GB);
+# put it earliest so smaller-item URL edits don't bust this layer.
+RUN wget -q -O ${COMFY_HOME}/models/text_encoders/nsfw_wan_umt5-xxl_fp8_scaled.safetensors \
+        https://huggingface.co/NSFW-API/NSFW-Wan-UMT5-XXL/resolve/main/nsfw_wan_umt5-xxl_fp8_scaled.safetensors
+
+# Wan 2.2 Lightning 4-step LoRAs (HIGH + LOW noise), paired — they're always
+# loaded together, so one RUN keeps cache invalidation atomic.
+RUN wget -q -O ${COMFY_HOME}/models/loras/Wan2.2-Lightning_I2V-A14B-4steps-lora_HIGH_fp16.safetensors \
+        https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/LoRAs/Wan22-Lightning/old/Wan2.2-Lightning_I2V-A14B-4steps-lora_HIGH_fp16.safetensors && \
+    wget -q -O ${COMFY_HOME}/models/loras/Wan2.2-Lightning_I2V-A14B-4steps-lora_LOW_fp16.safetensors \
+        https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/LoRAs/Wan22-Lightning/old/Wan2.2-Lightning_I2V-A14B-4steps-lora_LOW_fp16.safetensors
+
+# Wan 2.1 VAE — used by Wan 2.2 I2V workflows.
+RUN wget -q -O ${COMFY_HOME}/models/vae/wan_2.1_vae.safetensors \
+        https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/vae/wan_2.1_vae.safetensors
 
 # -----------------------------------------------------------------------------
 # 6) Handler last — small layer, frequent edits, doesn't bust anything heavier.
